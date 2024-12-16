@@ -12,7 +12,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <vector>
+#include <list>
 
 #include "thread_pool/constants.h"
 #include "thread_pool/detail/iterator.h"
@@ -59,10 +59,6 @@ namespace pool {
             const Timeout timeout_sec,
             ArgTypes &&... initargs) : kWorkersNum{workers_num},
                                        timeout_sec_(timeout_sec) {
-            // We capture Worker 'this' with lambda, which initializes the thread.
-            // Thus, we should avoid possible reallocation of the Worker because
-            // after reallocation, captured 'this' will point to the wrong address.
-            pool_.reserve(kWorkersNum);
             for (unsigned n = 0; n < kWorkersNum; ++n) {
                 // No std::move(initargs) here! Otherwise, only the first Worker
                 // gets the valid args.
@@ -148,7 +144,13 @@ namespace pool {
         }
 
     private:
-        std::vector<Worker> pool_;
+        // Here, std::list is a much better choice than std::vector:
+        // 1) We capture Worker 'this' with lambda, which initializes the thread.
+        // Thus, we should avoid possible reallocation of the Worker because
+        // after reallocation, captured 'this' will point to the wrong address.
+        // 2) std::vector elements should be MoveConstructible, which is not always
+        // possible considering custom Initializer.
+        std::list<Worker> pool_;
         Mutex mutex_; // jobs_ synchronization and cv notifications
         TaskQueue jobs_;
         std::condition_variable producer_cv_; // new task or termination
